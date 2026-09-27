@@ -18,7 +18,6 @@
 ## 🕹️ Commandes
 
 | Rôle | Touches | Action |
-| :--- | :--- | :--- |
 | **Chasseur** | `Flèches directionnelles` | Se déplacer |
 | **Chasseur** | `L` | Allumer / éteindre la lampe torche |
 | **Fantôme** | `W`, `A`, `S`, `D` | Se déplacer |
