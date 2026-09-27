@@ -11,15 +11,26 @@ class Game:
         self.screen = pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Ghost Chase")
         self.clock = pygame.time.Clock()
+        self.start_time = pygame.time.get_ticks()
+        self.time_limit = 60000  # 60 secondes en millisecondes (1 minute)
 
-        # Initialize game state
-        self.chasseur = Chasseur(100, 100)
-        self.fantome = Fantome(400, 400)
+        # Générer d'abord les murs pour connaître la map active
+        self.generate_walls()
+
+        # Placer aléatoirement le chasseur et le fantôme en évitant les murs
+        hx, hy = self.get_random_valid_position()
+        fx, fy = self.get_random_valid_position()
+        
+        # S'assurer qu'ils ne spawnent pas exactement au même endroit
+        while abs(hx - fx) < 100 and abs(hy - fy) < 100:
+            fx, fy = self.get_random_valid_position()
+
+        self.chasseur = Chasseur(hx, hy)
+        self.fantome = Fantome(fx, fy)
         self.players = {1: self.chasseur, 2: self.fantome}
 
         self.game_over = False
         self.winner = None
-        self.generate_walls()
         self.battery_recharge = None
         self.last_spawn_time = pygame.time.get_ticks()
         self.recharge_interval = 15000
@@ -67,23 +78,157 @@ class Game:
             print(f"Error loading images: {e}")
 
     def generate_walls(self):
-        self.walls = [
-            {'x': 300, 'y': 100, 'width': 200, 'height': 20},
-            {'x': 100, 'y': 300, 'width': 20, 'height': 200},
-            {'x': 400, 'y': 400, 'width': 200, 'height': 20},
-            {'x': 200, 'y': 200, 'width': 20, 'height': 150},
-            {'x': 500, 'y': 200, 'width': 20, 'height': 150},
-            {'x': 250, 'y': 100, 'width': 20, 'height': 100},
-            {'x': 450, 'y': 100, 'width': 20, 'height': 100},
-            # Border walls
+        # Les bordures communes à toutes les maps (pour ne pas sortir de l'écran)
+        borders = [
             {'x': 0, 'y': 0, 'width': 800, 'height': 20},
             {'x': 0, 'y': 0, 'width': 20, 'height': 600},
             {'x': 780, 'y': 0, 'width': 20, 'height': 600},
             {'x': 0, 'y': 580, 'width': 800, 'height': 20}
         ]
 
+        # Map 1 : Le manoir classique (croix et piliers centraux)
+        map_1 = borders + [
+            {'x': 300, 'y': 100, 'width': 200, 'height': 20},
+            {'x': 100, 'y': 300, 'width': 20, 'height': 200},
+            {'x': 400, 'y': 400, 'width': 200, 'height': 20},
+            {'x': 200, 'y': 200, 'width': 20, 'height': 150},
+            {'x': 500, 'y': 200, 'width': 20, 'height': 150},
+        ]
+
+        # Map 2 : Le labyrinthe cloisonné (grandes pièces séparées)
+        map_2 = borders + [
+            {'x': 200, 'y': 0, 'width': 20, 'height': 400},
+            {'x': 500, 'y': 200, 'width': 20, 'height': 400},
+            {'x': 350, 'y': 150, 'width': 150, 'height': 20},
+            {'x': 100, 'y': 480, 'width': 200, 'height': 20},
+        ]
+
+        # Map 3 : Les couloirs parallèles (idéal pour fuir ou tendre des pièges)
+        map_3 = borders + [
+            {'x': 150, 'y': 150, 'width': 500, 'height': 20},
+            {'x': 150, 'y': 300, 'width': 500, 'height': 20},
+            {'x': 150, 'y': 450, 'width': 500, 'height': 20},
+        ]
+
+        # Map 4 : La grande salle ouverte avec des piliers épars
+        map_4 = borders + [
+            {'x': 200, 'y': 150, 'width': 60, 'height': 60},
+            {'x': 540, 'y': 150, 'width': 60, 'height': 60},
+            {'x': 200, 'y': 390, 'width': 60, 'height': 60},
+            {'x': 540, 'y': 390, 'width': 60, 'height': 60},
+            {'x': 370, 'y': 270, 'width': 60, 'height': 60},
+        ]
+
+        # Choisir l'une des 4 cartes au hasard à chaque lancement
+        self.walls = random.choice([map_1, map_2, map_3, map_4])
+
+    def get_random_valid_position(self):
+        # Essayer de trouver une position libre qui ne touche pas les murs
+        while True:
+            x = random.randint(50, 730)
+            y = random.randint(50, 530)
+            if not self.collides_with_walls(x, y):
+                return x, y
+            
+    def move_player(self, player, dx, dy):
+        new_x = player.x + dx * player.speed
+        new_y = player.y + dy * player.speed
+        if not self.collides_with_walls(new_x, new_y):
+            player.x = new_x
+            player.y = new_y
+        self.check_collision(player)
+
+    def collides_with_walls(self, x, y):
+        player_size = 20  # Taille approximative du joueur
+        for wall in self.walls:
+            if (x < wall['x'] + wall['width'] and
+                x + player_size > wall['x'] and
+                y < wall['y'] + wall['height'] and
+                y + player_size > wall['y']):
+                return True
+        return False
+
+    def draw_light_cone(self, screen, player):
+        light_color = (255, 255, 150, 100)  # Couleur avec transparence
+        light_radius = 200
+        light_angle = 60  # Largeur du cône
+        
+        # Obtenir la direction du joueur via les touches
+        dx, dy = 0, 0
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            dx = -1
+        elif keys[pygame.K_RIGHT]:
+            dx = 1
+        if keys[pygame.K_UP]:
+            dy = -1
+        elif keys[pygame.K_DOWN]:
+            dy = 1
+        
+        # Calculer l'angle selon la direction
+        if dx == 0 and dy == 0:
+            angle = 0
+        elif dx == 0:
+            angle = 90 if dy > 0 else 270
+        elif dy == 0:
+            angle = 0 if dx > 0 else 180
+        else:
+            angle = math.degrees(math.atan2(dy, dx))
+            
+        angle_rad = math.radians(angle)
+        half_angle_rad = math.radians(light_angle / 2)
+        
+        # Surface semi-transparente pour la lumière
+        light_surface = pygame.Surface((800, 600), pygame.SRCALPHA)
+        start_pos = (player.x + 10, player.y + 10)
+        points = [start_pos]
+        
+        for i in range(21):
+            angle_i = angle_rad - half_angle_rad + i * (2 * half_angle_rad / 20)
+            end_pos = (player.x + 10 + light_radius * math.cos(angle_i),
+                        player.y + 10 + light_radius * math.sin(angle_i))
+            points.append(end_pos)
+            
+        pygame.draw.polygon(light_surface, light_color, points)
+        screen.blit(light_surface, (0, 0))
+        
+        # Vérifier si le fantôme est dans le cône lumineux
+        ghost_center_x = self.fantome.x + 10
+        ghost_center_y = self.fantome.y + 10
+        
+        distance = math.sqrt((player.x + 10 - ghost_center_x)**2 + (player.y + 10 - ghost_center_y)**2)
+        if distance > light_radius:
+            return False
+            
+        ghost_angle = math.atan2(ghost_center_y - (player.y + 10), ghost_center_x - (player.x + 10))
+        angle_diff = abs((ghost_angle - angle_rad + math.pi) % (2 * math.pi) - math.pi)
+        
+        if angle_diff <= half_angle_rad:
+            self.fantome.visible = True
+            # Dégâts infligés au fantôme quand il est dans la lumière
+            self.fantome.points_de_vie = max(0, self.fantome.points_de_vie - 0.05)
+            if self.fantome.points_de_vie <= 0:
+                self.fantome.alive = False
+            return True
+        return False
+    
     def update(self):
         current_time = pygame.time.get_ticks()
+
+        # --- 1. VÉRIFICATION DU CHRONOMÈTRE (1 MINUTE) ---
+        if current_time - self.start_time > self.time_limit and self.fantome.alive:
+            self.game_over = True
+            self.winner = "Fantôme (Temps écoulé)"
+
+        # Par défaut, on remet le fantôme à non visible au début de la frame
+        # Il sera redéfini à True uniquement si la lampe l'éclaire pendant le dessin
+        self.fantome.visible = False
+
+        # --- 2. RÉGÉNÉRATION DE VIE DU FANTÔME DANS LE NOIR ---
+        if self.fantome.alive and not self.fantome.visible:
+            # S'il est caché, il regagne doucement de la vie (max 10 PV d'origine)
+            if self.fantome.points_de_vie < 10:
+                self.fantome.points_de_vie = min(10.0, self.fantome.points_de_vie + 0.005)
 
         # Update hunter's flashlight
         if self.chasseur.lampe_on:
@@ -105,98 +250,13 @@ class Game:
         if self.battery_recharge and current_time - self.battery_recharge.spawn_time > self.battery_recharge.duration:
             self.battery_recharge = None
 
-        # Check if game is over
+        # Check if game is over (Chasseur gagne si le fantôme meurt)
         if not self.fantome.alive:
             self.game_over = True
             self.winner = "Chasseur"
         elif not self.chasseur.alive:
             self.game_over = True
             self.winner = "Fantôme"
-
-    def move_player(self, player, dx, dy):
-        new_x = player.x + dx * player.speed
-        new_y = player.y + dy * player.speed
-        if not self.collides_with_walls(new_x, new_y):
-            player.x = new_x
-            player.y = new_y
-        self.check_collision(player)
-
-    def collides_with_walls(self, x, y):
-        player_size = 20  # Approximate player size
-        for wall in self.walls:
-            if (x < wall['x'] + wall['width'] and
-                x + player_size > wall['x'] and
-                y < wall['y'] + wall['height'] and
-                y + player_size > wall['y']):
-                return True
-        return False
-
-    def draw_light_cone(self, screen, player):
-        light_color = (255, 255, 150, 100)  # Added transparency
-        light_radius = 200
-        light_angle = 60  # Wider angle for better playability
-        
-        # Get player direction
-        dx, dy = 0, 0
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            dx = -1
-        elif keys[pygame.K_RIGHT]:
-            dx = 1
-        if keys[pygame.K_UP]:
-            dy = -1
-        elif keys[pygame.K_DOWN]:
-            dy = 1
-        
-        # Calculate angle based on direction
-        if dx == 0 and dy == 0:
-            angle = 0  # Default direction
-        elif dx == 0:
-            angle = 90 if dy > 0 else 270
-        elif dy == 0:
-            angle = 0 if dx > 0 else 180
-        else:
-            angle = math.degrees(math.atan2(dy, dx))
-            
-        # Convert to radians
-        angle_rad = math.radians(angle)
-        half_angle_rad = math.radians(light_angle / 2)
-        
-        # Create a semi-transparent surface for the light
-        light_surface = pygame.Surface((800, 600), pygame.SRCALPHA)
-        
-        # Draw the light cone
-        start_pos = (player.x + 10, player.y + 10)
-        points = [start_pos]
-        
-        # Add points along the arc
-        for i in range(21):  # More points for smoother cone
-            angle_i = angle_rad - half_angle_rad + i * (2 * half_angle_rad / 20)
-            end_pos = (player.x + 10 + light_radius * math.cos(angle_i),
-                        player.y + 10 + light_radius * math.sin(angle_i))
-            points.append(end_pos)
-            
-        # Draw the light cone on the transparent surface
-        pygame.draw.polygon(light_surface, light_color, points)
-        screen.blit(light_surface, (0, 0))
-        
-        # Check if ghost is in light
-        ghost_center_x = self.fantome.x + 10
-        ghost_center_y = self.fantome.y + 10
-        
-        # Check if ghost is in range
-        distance = math.sqrt((player.x + 10 - ghost_center_x)**2 + (player.y + 10 - ghost_center_y)**2)
-        if distance > light_radius:
-            return False
-            
-        # Check if ghost is in the cone angle
-        ghost_angle = math.atan2(ghost_center_y - (player.y + 10), ghost_center_x - (player.x + 10))
-        angle_diff = abs((ghost_angle - angle_rad + math.pi) % (2 * math.pi) - math.pi)
-        
-        if angle_diff <= half_angle_rad:
-            self.fantome.visible = True
-            return True
-        return False
 
     def draw_battery(self, screen, player):
         battery_width = 100
@@ -280,47 +340,85 @@ class Game:
                 self.battery_recharge = None
 
     def draw(self):
-        # Draw background
-        self.screen.blit(self.background_image, (0, 0))
+        # Fond sombre texturé ou couleur de sol de manoir (gris très sombre / parquet)
+        self.screen.fill((20, 20, 30))
         
-        # Draw walls
+        # Dessiner des motifs discrets sur le sol (petites dalles/carreaux)
+        for x in range(0, 800, 40):
+            pygame.draw.line(self.screen, (25, 25, 38), (x, 0), (x, 600), 1)
+        for y in range(0, 600, 40):
+            pygame.draw.line(self.screen, (25, 25, 38), (0, y), (800, y), 1)
+            
+        # --- DESSIN DES MURS (Effet pierre/brique de manoir) ---
         for wall in self.walls:
-            pygame.draw.rect(self.screen, (180, 180, 180), 
+            # Corps du mur
+            pygame.draw.rect(self.screen, (60, 60, 75), 
                             (wall['x'], wall['y'], wall['width'], wall['height']))
+            # Bordure lumineuse pour donner du relief
+            pygame.draw.rect(self.screen, (90, 90, 110), 
+                            (wall['x'], wall['y'], wall['width'], wall['height']), 2)
             
-        # Draw battery recharge
+        # Affichage du temps restant en haut au centre de l'écran
+        elapsed_time = (pygame.time.get_ticks() - self.start_time) / 1000
+        time_left = max(0, int(60 - elapsed_time))
+        timer_text = self.font.render(f"Temps: {time_left}s", True, (255, 255, 255))
+        self.screen.blit(timer_text, (400 - timer_text.get_width() // 2, 10))
+
+        # --- DESSIN DU BONUS DE BATTERIE ---
         if self.battery_recharge:
-            pygame.draw.circle(self.screen, (0, 255, 255), 
-                              (self.battery_recharge.x, self.battery_recharge.y), 10)
+            # Un cercle énergétique cyan brillant avec une lueur
+            pygame.draw.circle(self.screen, (0, 200, 255), 
+                              (self.battery_recharge.x + 10, self.battery_recharge.y + 10), 12)
+            pygame.draw.circle(self.screen, (200, 240, 255), 
+                              (self.battery_recharge.x + 10, self.battery_recharge.y + 10), 6)
             
-        # Draw Hunter and light cone if active
+        # --- DESSIN DU CHASSEUR ---
         if self.chasseur.alive:
-            self.screen.blit(self.hunter_image, (self.chasseur.x, self.chasseur.y))
+            hx, hy = self.chasseur.x, self.chasseur.y
+            
+            # 1. Ombre portée au sol
+            pygame.draw.ellipse(self.screen, (10, 10, 15), (hx + 2, hy + 14, 16, 8))
+            
+            # 2. Veste tactique / Corps principal (bleu nuit/sombre avec gilet orange de survie)
+            pygame.draw.circle(self.screen, (40, 50, 70), (int(hx + 10), int(hy + 10)), 10)
+            pygame.draw.circle(self.screen, (220, 120, 30), (int(hx + 10), int(hy + 10)), 7) # Gilet haute visibilité
+            
+            # 3. Casque de chantier / tactique avec contour
+            pygame.draw.circle(self.screen, (240, 180, 40), (int(hx + 10), int(hy + 7)), 6)
+            pygame.draw.arc(self.screen, (180, 130, 20), (hx + 3, hy + 1, 14, 10), 0, 3.14, 3)
+            
+            # 4. Lampe torche tenue à la main (petit rectangle lumineux pointé vers l'avant)
+            # On dessine un petit cylindre de lampe selon l'état de la lampe
+            flashlight_color = (255, 255, 200) if self.chasseur.lampe_on else (100, 100, 100)
+            pygame.draw.rect(self.screen, (50, 50, 50), (hx + 14, hy + 8, 6, 4), border_radius=1)
+            pygame.draw.circle(self.screen, flashlight_color, (hx + 20, hy + 10), 2)
+            
+            # Cône de lumière si activé
             if self.chasseur.lampe_on:
                 self.draw_light_cone(self.screen, self.chasseur)
                 
-        # Draw UI elements for Hunter
+        # --- DESSIN DU FANTÔME (S'il est visible ou pour lui-même) ---
+        if self.fantome.alive:
+            if self.fantome.visible:
+                fx, fy = self.fantome.x, self.fantome.y
+                # Forme vaporeuse du fantôme (bleu spectral)
+                pygame.draw.circle(self.screen, (150, 180, 255), (int(fx + 10), int(fy + 8)), 9)
+                # Petits yeux brillants menaçants
+                pygame.draw.circle(self.screen, (255, 0, 0), (int(fx + 7), int(fy + 6)), 2)
+                pygame.draw.circle(self.screen, (255, 0, 0), (int(fx + 13), int(fy + 6)), 2)
+                
+                # Barre de vie du fantôme (affichée uniquement quand il est révélé)
+                health_text = self.font.render(f"Vie: {int(self.fantome.points_de_vie)}", True, (255, 100, 100))
+                self.screen.blit(health_text, (fx - 10, fy - 22))
+
+        # --- INTERFACE UTILISATEUR (UI) ---
         self.draw_battery(self.screen, self.chasseur)
         self.draw_ghost_detector(self.screen, self.chasseur, self.fantome)
             
-        # Draw Ghost only if visible (in light) or for the ghost player
-        if self.fantome.alive:
-            if self.fantome.visible:
-                self.screen.blit(self.ghost_image, (self.fantome.x, self.fantome.y))
-                # Display ghost health
-                health_text = self.font.render(f"Vie: {int(self.fantome.points_de_vie)}", True, (255, 255, 255))
-                self.screen.blit(health_text, (self.fantome.x, self.fantome.y - 20))
-                
-            # Ghost is always visible to itself (for ghost player)
-            # In a networked game, you'd only show this to the ghost player
-            pygame.draw.rect(self.screen, (100, 100, 255, 128), 
-                            (self.fantome.x, self.fantome.y, 20, 20), 1)
-                
-        # Draw game over screen if game is over
+        # Écran de fin si Game Over
         if self.game_over:
             self.draw_game_over()
             
-        # Update display
         pygame.display.flip()
         
     def draw_game_over(self):

@@ -9,94 +9,90 @@ from game import Game
 class GhostChaseLobby:
     def __init__(self, root):
         self.root = root
-        self.root.title("Ghost Chase Launcher")
-        self.root.geometry("500x400")
+        self.root.title("Ghost Chase - Manoir Hanté")
+        self.root.geometry("600x500")
         self.root.resizable(False, False)
         
-        # Set background color
-        self.root.configure(bg="#2d2d2d")
+        # Fond sombre style manoir
+        self.root.configure(bg="#1a1a24")
         
-        # Title
-        title_frame = Frame(root, bg="#2d2d2d")
-        title_frame.pack(pady=20)
+        # --- TITRE ---
+        title_frame = Frame(root, bg="#1a1a24")
+        title_frame.pack(pady=30)
         
-        title_label = Label(title_frame, text="GHOST CHASE", font=("Arial", 24, "bold"), 
-                            fg="#ff9900", bg="#2d2d2d")
+        title_label = Label(title_frame, text="GHOST CHASE", font=("Arial", 28, "bold"), 
+                            fg="#ff8800", bg="#1a1a24")
         title_label.pack()
         
-        subtitle_label = Label(title_frame, text="Un jeu de chasse aux fantômes", 
-                              font=("Arial", 12), fg="#cccccc", bg="#2d2d2d")
+        subtitle_label = Label(title_frame, text="Traquez le fantôme... ou échappez à la lumière.", 
+                              font=("Arial", 11, "italic"), fg="#8888aa", bg="#1a1a24")
         subtitle_label.pack(pady=5)
         
-        # Game modes
-        modes_frame = Frame(root, bg="#2d2d2d")
-        modes_frame.pack(pady=20)
+        # --- BOUTON DE LANCEMENT ---
+        modes_frame = Frame(root, bg="#1a1a24")
+        modes_frame.pack(pady=15)
         
-        self.start_button = Button(modes_frame, text="JOUER", font=("Arial", 14, "bold"),
-                                 bg="#ff9900", fg="#000000", width=15, height=2,
+        self.start_button = Button(modes_frame, text="ENTRER DANS LE MANOIR", font=("Arial", 13, "bold"),
+                                 bg="#ff7700", fg="#ffffff", activebackground="#ff9933", activeforeground="#ffffff",
+                                 relief="flat", bd=0, padx=20, pady=10,
                                  command=self.start_game)
-        self.start_button.pack(pady=10)
+        self.start_button.pack()
         
-        # Instructions
-        instructions_frame = Frame(root, bg="#2d2d2d")
-        instructions_frame.pack(pady=10)
+        # --- CADRE DES CONTRÔLES ---
+        instructions_frame = Frame(root, bg="#222230", padx=20, pady=15)
+        instructions_frame.pack(pady=15, fill="x", padx=50)
         
-        instructions_title = Label(instructions_frame, text="Contrôles:", 
-                                 font=("Arial", 12, "bold"), fg="#ffffff", bg="#2d2d2d")
-        instructions_title.pack(anchor="w")
+        instructions_title = Label(instructions_frame, text="Commandes des rôles :", 
+                                 font=("Arial", 11, "bold"), fg="#ffaa44", bg="#222230")
+        instructions_title.pack(anchor="w", pady=(0, 5))
         
         instructions = [
-            "- Chasseur: Flèches pour se déplacer, L pour la lampe",
-            "- Fantôme: WASD pour se déplacer"
+            "🔦 Chasseur : Flèches directionnelles pour bouger, [L] pour la lampe",
+            "👻 Fantôme : Touches W-A-S-D pour se déplacer"
         ]
         
         for instruction in instructions:
             instr_label = Label(instructions_frame, text=instruction, 
-                              font=("Arial", 10), fg="#cccccc", bg="#2d2d2d", justify="left")
-            instr_label.pack(anchor="w", padx=20)
+                              font=("Arial", 10), fg="#cccccc", bg="#222230", justify="left")
+            instr_label.pack(anchor="w", pady=2)
         
-        # Footer
-        footer_frame = Frame(root, bg="#2d2d2d")
-        footer_frame.pack(side="bottom", fill="x", pady=10)
+        # --- FOOTER ---
+        footer_frame = Frame(root, bg="#1a1a24")
+        footer_frame.pack(side="bottom", fill="x", pady=20)
         
         quit_button = Button(footer_frame, text="Quitter", font=("Arial", 10),
-                           bg="#444444", fg="#ffffff", width=10,
+                           bg="#333344", fg="#aaaaaa", activebackground="#444455", activeforeground="#ffffff",
+                           relief="flat", bd=0, padx=15, pady=5,
                            command=self.quit_game)
-        quit_button.pack(side="right", padx=20)
+        quit_button.pack()
         
     def start_game(self):
-        # Disable the start button to prevent multiple clicks
-        self.start_button.config(state="disabled")
+        # Désactiver le bouton pour éviter les doubles clics
+        self.start_button.config(state="disabled", bg="#555555")
         
-        # Show a message about controls
-        messagebox.showinfo("Ghost Chase", 
-                           "Le jeu va démarrer!\n\n"
-                           "Chasseur: Flèches pour se déplacer, L pour la lampe\n"
-                           "Fantôme: WASD pour se déplacer\n\n"
-                           "Appuyez sur OK pour commencer")
-        
-        # Start the game in a separate thread
+        # Lancer le jeu dans un thread séparé pour ne pas figer l'interface Tkinter
         game_thread = threading.Thread(target=self.run_game)
-        game_thread.daemon = True  # Thread will close when main program exits
+        game_thread.daemon = True
         game_thread.start()
-        
+
+    
     def run_game(self):
         try:
             game = Game()
             game.run()
         except Exception as e:
-            messagebox.showerror("Error", f"Une erreur est survenue: {str(e)}")
+            messagebox.showerror("Erreur", f"Une erreur est survenue dans le jeu : {str(e)}")
         finally:
-            # Re-enable the start button when the game ends
-            self.root.after(0, lambda: self.start_button.config(state="normal"))
+            # Réactiver le bouton une fois la partie fermée
+            if self.root.winfo_exists():
+                self.root.after(0, lambda: self.start_button.config(state="normal", bg="#ff7700"))
     
     def quit_game(self):
-        if messagebox.askyesno("Quitter", "Voulez-vous vraiment quitter?"):
+        if messagebox.askyesno("Quitter", "Voulez-vous vraiment fuir le manoir ?"):
             self.root.destroy()
             sys.exit()
 
 def main():
-    # Create and run the application
     root = tk.Tk()
     app = GhostChaseLobby(root)
     root.mainloop()
