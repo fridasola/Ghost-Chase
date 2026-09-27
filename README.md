@@ -41,19 +41,22 @@ Assurez-vous d'avoir les fichiers suivants dans le même dossier :
 
 Lancez ensuite le menu du jeu :
 
-'''Bash
-python Lobby.py'''
+```Bash
+python Lobby.py
+```
 
 ### 3. Lancer en mode Réseau (Multijoueur sur deux PC)
 Sur le premier ordinateur (le serveur) :
 
-'''Bash
-python server.py''' 
+```Bash
+python server.py
+```
 
 Sur les deux ordinateurs (le serveur et le client) :
 
-'''Bash
-python client.py'''
+```Bash
+python client.py
+```
 
 (Entrez l'adresse IP locale du serveur si vous jouez sur deux machines distinctes, ou laissez vide pour localhost).
 
